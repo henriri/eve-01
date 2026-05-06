@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>EV·GG</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+
+    <!-- layer 0: blobs -->
+    <div id="blobs">
+      <div class="blob blob-a"></div>
+      <div class="blob blob-b"></div>
+      <div class="blob blob-c"></div>
+    </div>
+
+    <!-- layer 1: three.js torus -->
+    <canvas id="canvas"></canvas>
+
+    <!-- layer 2: frame -->
+    <div id="scene">
+      <div class="card" id="card">
+
+        <!-- front -->
+        <div class="card-face face-front">
+          <div class="frame-title">EV·GG</div>
+          <div class="frame-meta">
+            46°06'N &nbsp;7°16'E &nbsp;— &nbsp;1500M<br />
+            Juin 2026<br />
+            Orbite de stationnement.<br />
+            Durée non communiquée.
+          </div>
+          <button class="frame-cta" id="cta">
+            Consulter le plan de vol <span class="arrow">→</span>
+          </button>
+        </div>
+
+        <!-- back -->
+        <div class="card-face face-back">
+          <div class="program-header">
+            <span>Plan de vol — EVE·01</span>
+            <button class="program-close" id="close">✕ fermer</button>
+          </div>
+          <div class="program-days" id="program-days">
+            <!-- injected by program.ts -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
