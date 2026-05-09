@@ -16,33 +16,25 @@
       <div class="blob blob-c"></div>
     </div>
 
-    <!-- layer 1: three.js canvas (torus + particles) -->
+    <!-- layer 1: 2D trail canvas -->
+    <canvas id="trail-canvas"></canvas>
+
+    <!-- layer 2: three.js canvas (torus + terrain) -->
     <canvas id="canvas"></canvas>
 
-    <!-- layer 2: frame -->
+    <!-- layer 3: frame -->
     <div id="scene">
       <div class="card" id="card">
 
-        <!-- FRONT FACE — 5-zone instrument panel -->
         <div class="card-face face-front">
-
-          <!-- Zone A: header bar -->
           <div class="zone zone-a">
             <span class="zone-a-label">EVE·01</span>
             <span class="zone-a-status">Orbite de stationnement.</span>
           </div>
-
-          <!-- Zone B: title -->
           <div class="zone zone-b">
             <span class="frame-title">EV·GG</span>
           </div>
-
-          <!-- Zone C: torus window -->
-          <div class="zone zone-c">
-            <!-- torus renders on the canvas behind, this is a transparent window -->
-          </div>
-
-          <!-- Zone D: footer data bar -->
+          <div class="zone zone-c"></div>
           <div class="zone zone-d">
             <div class="zone-d-left">
               <span>46°06'N &nbsp;7°16'E — 1500M</span>
@@ -53,25 +45,19 @@
               <span>Juin 2026</span>
             </div>
           </div>
-
-          <!-- Zone E: CTA bar -->
           <div class="zone zone-e">
             <button class="frame-cta" id="cta">
               Consulter le plan de vol <span class="arrow">→</span>
             </button>
           </div>
-
         </div>
 
-        <!-- BACK FACE — program -->
         <div class="card-face face-back">
           <div class="program-header">
             <span>Plan de vol &nbsp;EV·GG</span>
             <button class="program-close" id="close">✕ &nbsp;Fermer</button>
           </div>
-          <div class="program-days" id="program-days">
-            <!-- injected by program.ts -->
-          </div>
+          <div class="program-days" id="program-days"></div>
         </div>
 
       </div>

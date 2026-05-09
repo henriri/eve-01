@@ -1,8 +1,7 @@
-// ─── torus.ts v3 ──────────────────────────────────────────────────
-// - Y-only auto-rotation (no banking/pitch drift)
-// - Fixed shallow X tilt (15°) — stays horizontal
-// - Opacity 0.08 — ghost presence
-// - Exports: fadeTorus(), revealTorus(), getScene(), getCamera()
+// ─── torus.ts v4 ──────────────────────────────────────────────────
+// - Base orientation: lying flat (rotation.x = PI/2)
+// - Animates on Z axis (spin) + gentle X oscillation (nod)
+// - Y axis locked — never rotates vertically
 
 import * as THREE from 'three'
 
@@ -12,12 +11,15 @@ export let torusGeo:  THREE.TorusGeometry | null = null
 let renderer: THREE.WebGLRenderer
 let scene:    THREE.Scene
 let camera:   THREE.PerspectiveCamera
+let elapsed = 0
+let lastTime = 0
 
 export function getScene()  { return scene  }
 export function getCamera() { return camera }
 
-const TORUS_OPACITY   = 0.08
-const TORUS_X_TILT    = Math.PI / 12  // 15° — horizontal ring, not tilted donut
+const TORUS_OPACITY = 0.08
+// PI/2 = lying flat. We'll oscillate X gently around this base.
+const TORUS_X_BASE  = Math.PI / 2
 
 export function initTorus() {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -34,13 +36,16 @@ export function initTorus() {
 
   torusGeo  = new THREE.TorusGeometry(0.72, 0.26, 24, 80)
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xf2f0e8,
+    color:       0xf2f0e8,
     wireframe:   true,
     opacity:     TORUS_OPACITY,
     transparent: true,
   })
   torusMesh = new THREE.Mesh(torusGeo, mat)
-  torusMesh.rotation.x = TORUS_X_TILT  // fixed shallow tilt, never changes
+  // start flat, y locked to 0
+  torusMesh.rotation.x = TORUS_X_BASE
+  torusMesh.rotation.y = 0
+  torusMesh.rotation.z = 0
   scene.add(torusMesh)
 
   resize()
@@ -48,11 +53,10 @@ export function initTorus() {
   animate()
 }
 
-// fade torus out → resolves when invisible
 export function fadeTorus(): Promise<void> {
   return new Promise((resolve) => {
     if (!torusMesh) { resolve(); return }
-    const mat = torusMesh.material as THREE.MeshBasicMaterial
+    const mat       = torusMesh.material as THREE.MeshBasicMaterial
     const duration  = 400
     const start     = performance.now()
     const startOpac = mat.opacity
@@ -60,35 +64,27 @@ export function fadeTorus(): Promise<void> {
     function step() {
       const p = Math.min((performance.now() - start) / duration, 1)
       mat.opacity = startOpac * (1 - p)
-      if (p < 1) {
-        requestAnimationFrame(step)
-      } else {
-        if (torusMesh) torusMesh.visible = false
-        resolve()
-      }
+      if (p < 1) requestAnimationFrame(step)
+      else { if (torusMesh) torusMesh.visible = false; resolve() }
     }
     step()
   })
 }
 
-// fade torus back in → resolves when fully visible
 export function revealTorus(): Promise<void> {
   return new Promise((resolve) => {
     if (!torusMesh) { resolve(); return }
     torusMesh.visible = true
-    const mat = torusMesh.material as THREE.MeshBasicMaterial
-    mat.opacity = 0
+    const mat      = torusMesh.material as THREE.MeshBasicMaterial
+    mat.opacity    = 0
     const duration = 500
     const start    = performance.now()
 
     function step() {
       const p = Math.min((performance.now() - start) / duration, 1)
       mat.opacity = TORUS_OPACITY * p
-      if (p < 1) {
-        requestAnimationFrame(step)
-      } else {
-        resolve()
-      }
+      if (p < 1) requestAnimationFrame(step)
+      else resolve()
     }
     step()
   })
@@ -102,9 +98,22 @@ function resize() {
 
 function animate() {
   requestAnimationFrame(animate)
-  // Y-only rotation — no banking, no pitch drift
+
+  const now   = performance.now()
+  const delta = Math.min((now - lastTime) / 1000, 0.05)
+  lastTime    = now
+  elapsed    += delta
+
   if (torusMesh && torusMesh.visible) {
-    torusMesh.rotation.y += 0.0025
+    // Z: continuous spin — lies flat, rotates like a coin on a table
+    torusMesh.rotation.z += 0.003
+
+    // X: gentle oscillation around flat base — subtle nod ±~8°
+    torusMesh.rotation.x = TORUS_X_BASE + Math.sin(elapsed * 0.4) * 0.15
+
+    // Y: stays at 0 — never tilts to vertical
+    torusMesh.rotation.y = 0
   }
+
   renderer.render(scene, camera)
 }
