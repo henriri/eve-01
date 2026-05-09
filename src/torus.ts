@@ -12,7 +12,7 @@ export const TORUS_COUNT   = RADIAL_SEGS * TUBULAR_SEGS  // 3072
 const RADIUS       = 0.9
 const TUBE         = 0.16
 const TORUS_X_BASE = Math.PI / 2.4
-const DOT_OPACITY  = 0.75
+const DOT_OPACITY  = 0.88
 
 const VERT_SHADER = `
   uniform float uBaseSize;
@@ -99,7 +99,7 @@ export function initTorus() {
 
   shaderMat = new THREE.ShaderMaterial({
     uniforms: {
-      uBaseSize:   { value: 6 },
+      uBaseSize:   { value: 8 },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
       uOpacity:    { value: DOT_OPACITY },
     },

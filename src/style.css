@@ -125,10 +125,12 @@ body {
 .card.flipped { transform: rotateY(180deg); }
 
 .card.expanded {
-  width: min(82vw, 700px);
+  width: min(calc(100vw - 48px), 900px);
+  height: min(calc(100vh - 48px), 900px);
   transition:
     transform 0.65s cubic-bezier(0.77, 0, 0.18, 1),
-    width  0.5s cubic-bezier(0.77, 0, 0.18, 1) 0.3s;
+    width  0.5s cubic-bezier(0.77, 0, 0.18, 1) 0.3s,
+    height 0.5s cubic-bezier(0.77, 0, 0.18, 1) 0.3s;
 }
 
 /* ─── shared face ─────────────────────────────────────────────── */
@@ -178,7 +180,7 @@ body {
   font-family: var(--clash);
   font-weight: 700;
   font-size: 72px;
-  letter-spacing: -0.03em;
+  letter-spacing: 0.05em;
   line-height: 1;
   color: var(--off-white);
   display: block;
@@ -251,7 +253,6 @@ body {
   flex-direction: column;
   padding: 28px 32px;
   overflow: hidden;
-  /* backdrop blur applied via .card.expanded .face-back */
   background: rgba(8, 8, 15, 0.15);
   transition: background 0.4s, backdrop-filter 0.4s;
 }
@@ -287,7 +288,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  overflow-y: auto;
+  overflow-y: hidden;
   flex: 1;
 }
 .program-day-label {
@@ -328,5 +329,9 @@ body {
   :root { --card-w: calc(100vw - 32px); }
   .frame-title { font-size: 52px; }
   .zone-c { height: 140px; }
-  .face-back { padding: 20px; }
+  .face-back { padding: 20px 16px; }
+  .card.expanded {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+  }
 }

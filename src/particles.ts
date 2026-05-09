@@ -159,7 +159,7 @@ function buildTerrainData() {
   extraAttr.setUsage(THREE.DynamicDrawUsage)
   geo.setAttribute('position', extraAttr)
   extraMat = new THREE.ShaderMaterial({
-    uniforms: { uOpacity: { value: 0 }, uBaseSize: { value: 6 }, uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } },
+    uniforms: { uOpacity: { value: 0 }, uBaseSize: { value: 8 }, uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } },
     vertexShader: VERT_EXTRA, fragmentShader: FRAG_EXTRA, transparent: true,
   })
   extraPoints = new THREE.Points(geo, extraMat)
