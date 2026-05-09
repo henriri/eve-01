@@ -13,7 +13,7 @@ import {
 } from './torus'
 
 const COLS = 70
-const ROWS = 70
+const ROWS = 120
 
 const CAM_TORUS   = new THREE.Vector3(0,   0, 5)
 const CAM_TERRAIN = new THREE.Vector3(0, 3.5, 7)
@@ -150,7 +150,7 @@ function buildTerrain() {
   shaderMat = new THREE.ShaderMaterial({
     uniforms: {
       uOpacity:    { value: 0 },
-      uBaseSize:   { value: 120 },
+      uBaseSize:   { value: 30 },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
     },
     vertexShader:   VERT_SHADER,
