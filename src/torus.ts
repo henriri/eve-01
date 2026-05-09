@@ -1,62 +1,85 @@
-// ─── torus.ts v6 ──────────────────────────────────────────────────
-// Torus rendered as Points (dots) not wireframe mesh.
-// Thinner tube, larger hole, tilted ~75° for perspective.
-// Exports: initTorus, getScene, getCamera, getTorusPositions,
-//          fadeTorus, revealTorus, animateTorusBreak, animateTorusMerge
+// ─── torus.ts — morph-linesegments branch ────────────────────────
+// Torus rendered as LineSegments. Each segment collapses to a point
+// via uCollapse uniform, then midpoints travel to terrain targets.
+// On close: midpoints converge back, segments re-expand.
 
 import * as THREE from 'three'
 
-// ── geometry params ───────────────────────────────────────────────
-const RADIUS          = 0.9
-const TUBE            = 0.16
-const RADIAL_SEGS     = 32
-const TUBULAR_SEGS    = 96
-const TORUS_X_BASE    = Math.PI / 2.4   // ~75° — tilted, not flat coin
-const DOT_OPACITY     = 0.75
+export const RADIAL_SEGS  = 32
+export const TUBULAR_SEGS = 96
+export const TORUS_COUNT  = RADIAL_SEGS * TUBULAR_SEGS  // 3072 segments
 
-// ── shader — matches terrain shader for visual consistency ────────
+const RADIUS       = 0.9
+const TUBE         = 0.16
+const TORUS_X_BASE = Math.PI / 2.4
+const LINE_OPACITY = 0.55
+
+// Each segment: 2 vertices (start, end) + midpoint baked in
+// Shader lerps start→mid and end→mid based on uCollapse [0..1]
 const VERT_SHADER = `
-  uniform float uBaseSize;
-  uniform float uPixelRatio;
+  attribute vec3 aMid;        // midpoint of this segment
+  attribute float aEndFlag;   // 0 = start vertex, 1 = end vertex
+  uniform float uCollapse;    // 0 = full segment, 1 = collapsed to point
   uniform float uOpacity;
 
+  void main() {
+    // lerp this vertex toward the midpoint
+    vec3 collapsed = mix(position, aMid, uCollapse);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(collapsed, 1.0);
+  }
+`
+const FRAG_SHADER = `
+  uniform float uOpacity;
+  void main() {
+    gl_FragColor = vec4(0.949, 0.941, 0.910, uOpacity);
+  }
+`
+
+// ── point shader — used after full collapse for travel phase ──────
+const VERT_POINT = `
+  uniform float uBaseSize;
+  uniform float uPixelRatio;
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = uBaseSize * uPixelRatio * (1.0 / -mvPosition.z);
     gl_Position  = projectionMatrix * mvPosition;
   }
 `
-const FRAG_SHADER = `
+const FRAG_POINT = `
   uniform float uOpacity;
   void main() {
-    vec2  uv   = gl_PointCoord - vec2(0.5);
-    if (length(uv) > 0.5) discard;
+    if (length(gl_PointCoord - vec2(0.5)) > 0.5) discard;
     gl_FragColor = vec4(0.949, 0.941, 0.910, uOpacity);
   }
 `
 
-// ── state ─────────────────────────────────────────────────────────
 let renderer:   THREE.WebGLRenderer
 let scene:      THREE.Scene
 let camera:     THREE.PerspectiveCamera
-let pointsObj:  THREE.Points | null = null
-let shaderMat:  THREE.ShaderMaterial | null = null
-let posAttr:    THREE.BufferAttribute
 
-// baked rest positions for merge-back animation
-let restPositions: Float32Array
+// line segments object (torus at rest + collapse animation)
+let lineObj:    THREE.LineSegments
+let lineMat:    THREE.ShaderMaterial
+let linePosAttr: THREE.BufferAttribute // interleaved start/end for LineSegments
+
+// points object (travel phase — midpoints moving to terrain)
+export let pointsObj:  THREE.Points
+export let pointsMat:  THREE.ShaderMaterial
+export let midPosAttr: THREE.BufferAttribute // midpoint positions for travel
+
+// baked data
+export let restMids:      Float32Array  // original midpoint positions
+export let restPositions: Float32Array  // for merge-back reference (= restMids)
 
 let elapsed  = 0
 let lastTime = 0
 let spinning = true
 
+// phase: 'lines' | 'collapsing' | 'points' | 'expanding'
+export let phase: 'lines' | 'collapsing' | 'points' | 'expanding' = 'lines'
+
 export function getScene()  { return scene  }
 export function getCamera() { return camera }
-
-// returns copy of rest positions for particles.ts to use in merge anim
-export function getTorusPositions(): Float32Array {
-  return restPositions.slice()
-}
 
 export function initTorus() {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -71,188 +94,149 @@ export function initTorus() {
   camera.position.set(0, 0, 5)
   camera.lookAt(0, 0, 0)
 
-  buildTorusPoints()
+  buildLineSegments()
+  buildPointsObject()
   resize()
   window.addEventListener('resize', resize)
   animate()
 }
 
-function buildTorusPoints() {
-  // Generate torus vertex positions manually so we control count
-  const geo   = new THREE.TorusGeometry(RADIUS, TUBE, RADIAL_SEGS, TUBULAR_SEGS)
+function buildLineSegments() {
+  const geo    = new THREE.TorusGeometry(RADIUS, TUBE, RADIAL_SEGS, TUBULAR_SEGS)
   const srcPos = geo.attributes.position as THREE.BufferAttribute
-  const count  = srcPos.count
+  const count  = srcPos.count  // = TORUS_COUNT
 
-  restPositions = new Float32Array(count * 3)
+  // For LineSegments we need 2 vertices per segment interleaved: [s0,e0, s1,e1, ...]
+  // We treat consecutive pairs of torus vertices as segments
+  const linePos   = new Float32Array(count * 2 * 3)
+  const midFlags  = new Float32Array(count * 2)
+  const midDupe   = new Float32Array(count * 2 * 3)
 
-  // Apply base tilt to rest positions
+  restMids      = new Float32Array(count * 3)
+  restPositions = restMids  // alias
+
   const euler = new THREE.Euler(TORUS_X_BASE, 0, 0)
   const mat4  = new THREE.Matrix4().makeRotationFromEuler(euler)
-  const vec   = new THREE.Vector3()
+  const vA    = new THREE.Vector3()
+  const vB    = new THREE.Vector3()
 
   for (let i = 0; i < count; i++) {
-    vec.fromBufferAttribute(srcPos, i)
-    vec.applyMatrix4(mat4)
-    restPositions[i * 3]     = vec.x
-    restPositions[i * 3 + 1] = vec.y
-    restPositions[i * 3 + 2] = vec.z
+    // each segment: vertex i and vertex (i+1) % count
+    const next = (i + 1) % count
+    vA.fromBufferAttribute(srcPos, i).applyMatrix4(mat4)
+    vB.fromBufferAttribute(srcPos, next).applyMatrix4(mat4)
+
+    const mx = (vA.x + vB.x) / 2
+    const my = (vA.y + vB.y) / 2
+    const mz = (vA.z + vB.z) / 2
+
+    restMids[i * 3]     = mx
+    restMids[i * 3 + 1] = my
+    restMids[i * 3 + 2] = mz
+
+    // interleaved: start then end
+    linePos[i * 6]     = vA.x; linePos[i * 6 + 1] = vA.y; linePos[i * 6 + 2] = vA.z
+    linePos[i * 6 + 3] = vB.x; linePos[i * 6 + 4] = vB.y; linePos[i * 6 + 5] = vB.z
+
+    // aMid — same midpoint for both vertices of this segment
+    midDupe[i * 6]     = mx; midDupe[i * 6 + 1] = my; midDupe[i * 6 + 2] = mz
+    midDupe[i * 6 + 3] = mx; midDupe[i * 6 + 4] = my; midDupe[i * 6 + 5] = mz
+
+    midFlags[i * 2]     = 0  // start
+    midFlags[i * 2 + 1] = 1  // end
   }
   geo.dispose()
 
-  const pointGeo = new THREE.BufferGeometry()
-  posAttr        = new THREE.BufferAttribute(restPositions.slice(), 3)
-  pointGeo.setAttribute('position', posAttr)
+  const lineGeo = new THREE.BufferGeometry()
+  linePosAttr   = new THREE.BufferAttribute(linePos, 3)
+  linePosAttr.setUsage(THREE.DynamicDrawUsage)
+  lineGeo.setAttribute('position', linePosAttr)
+  lineGeo.setAttribute('aMid',     new THREE.BufferAttribute(midDupe, 3))
+  lineGeo.setAttribute('aEndFlag', new THREE.BufferAttribute(midFlags, 1))
 
-  shaderMat = new THREE.ShaderMaterial({
-    uniforms: {
-      uBaseSize:   { value: 10 },
-      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-      uOpacity:    { value: DOT_OPACITY },
-    },
+  lineMat = new THREE.ShaderMaterial({
+    uniforms: { uCollapse: { value: 0 }, uOpacity: { value: LINE_OPACITY } },
     vertexShader:   VERT_SHADER,
     fragmentShader: FRAG_SHADER,
     transparent:    true,
   })
 
-  pointsObj = new THREE.Points(pointGeo, shaderMat)
+  lineObj = new THREE.LineSegments(lineGeo, lineMat)
+  scene.add(lineObj)
+}
+
+function buildPointsObject() {
+  // points object uses midpoint positions for the travel phase
+  const ptGeo   = new THREE.BufferGeometry()
+  midPosAttr    = new THREE.BufferAttribute(restMids.slice(), 3)
+  midPosAttr.setUsage(THREE.DynamicDrawUsage)
+  ptGeo.setAttribute('position', midPosAttr)
+
+  pointsMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uBaseSize:   { value: 6 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+      uOpacity:    { value: 0 },
+    },
+    vertexShader:   VERT_POINT,
+    fragmentShader: FRAG_POINT,
+    transparent:    true,
+  })
+  pointsObj = new THREE.Points(ptGeo, pointsMat)
+  pointsObj.visible = false
   scene.add(pointsObj)
 }
 
-// ── fade out torus dots ───────────────────────────────────────────
-export function fadeTorus(): Promise<void> {
-  return new Promise((resolve) => {
-    if (!shaderMat) { resolve(); return }
+// ── collapse: segments shrink to midpoints ────────────────────────
+export function collapseSegments(): Promise<void> {
+  return new Promise(resolve => {
+    phase   = 'collapsing'
     spinning = false
-    const start     = performance.now()
-    const startOpac = shaderMat.uniforms.uOpacity.value
-    function step() {
-      const p = Math.min((performance.now() - start) / 400, 1)
-      shaderMat!.uniforms.uOpacity.value = startOpac * (1 - p)
-      if (p < 1) requestAnimationFrame(step)
-      else { if (pointsObj) pointsObj.visible = false; resolve() }
-    }
-    step()
-  })
-}
-
-// ── fade torus back in at rest positions ──────────────────────────
-export function revealTorus(): Promise<void> {
-  return new Promise((resolve) => {
-    if (!shaderMat || !pointsObj || !posAttr) { resolve(); return }
-    // reset positions to rest
-    for (let i = 0; i < restPositions.length; i++) {
-      posAttr.array[i] = restPositions[i]
-    }
-    posAttr.needsUpdate = true
-    pointsObj.visible   = true
-    shaderMat.uniforms.uOpacity.value = 0
-    spinning = true
     const start = performance.now()
+    const dur   = 600
     function step() {
-      const p = Math.min((performance.now() - start) / 500, 1)
-      shaderMat!.uniforms.uOpacity.value = DOT_OPACITY * p
-      if (p < 1) requestAnimationFrame(step)
-      else resolve()
-    }
-    step()
-  })
-}
-
-// ── break: torus dots scatter outward ────────────────────────────
-// Called from particles.ts — animates dots flying outward then fades
-export function animateTorusBreak(): Promise<void> {
-  return new Promise((resolve) => {
-    if (!pointsObj || !shaderMat || !posAttr) { resolve(); return }
-    spinning = false
-    const count = restPositions.length / 3
-
-    // per-point velocity: outward from centre + random jitter
-    const vels = new Float32Array(count * 3)
-    for (let i = 0; i < count; i++) {
-      const x = restPositions[i * 3]
-      const y = restPositions[i * 3 + 1]
-      const z = restPositions[i * 3 + 2]
-      const len = Math.sqrt(x*x + y*y + z*z) || 1
-      vels[i * 3]     = (x / len) * 0.035 + (Math.random() - 0.5) * 0.02
-      vels[i * 3 + 1] = (y / len) * 0.035 + (Math.random() - 0.5) * 0.02
-      vels[i * 3 + 2] = (z / len) * 0.035 + (Math.random() - 0.5) * 0.015
-    }
-
-    const duration = 900
-    const start    = performance.now()
-    const startOpac = shaderMat.uniforms.uOpacity.value
-
-    function step() {
-      const p = Math.min((performance.now() - start) / duration, 1)
-
-      for (let i = 0; i < count; i++) {
-        posAttr.array[i * 3]     += vels[i * 3]
-        posAttr.array[i * 3 + 1] += vels[i * 3 + 1]
-        posAttr.array[i * 3 + 2] += vels[i * 3 + 2]
-        // drag
-        vels[i * 3]     *= 0.94
-        vels[i * 3 + 1] *= 0.94
-        vels[i * 3 + 2] *= 0.94
-      }
-      posAttr.needsUpdate = true
-
-      // fade out in second half
-      if (p > 0.4) {
-        const fp = (p - 0.4) / 0.6
-        shaderMat!.uniforms.uOpacity.value = startOpac * (1 - fp)
-      }
-
-      if (p < 1) requestAnimationFrame(step)
-      else { if (pointsObj) pointsObj.visible = false; resolve() }
-    }
-    step()
-  })
-}
-
-// ── merge: dots converge from scattered back to rest positions ────
-// particles.ts calls this with current scattered positions
-export function animateTorusMerge(fromPositions: Float32Array): Promise<void> {
-  return new Promise((resolve) => {
-    if (!pointsObj || !shaderMat || !posAttr) { resolve(); return }
-
-    // set starting positions to wherever dots currently are
-    for (let i = 0; i < fromPositions.length; i++) {
-      posAttr.array[i] = fromPositions[i]
-    }
-    posAttr.needsUpdate = true
-    pointsObj.visible   = true
-    shaderMat.uniforms.uOpacity.value = 0
-
-    const count    = restPositions.length / 3
-    const duration = 1000
-    const start    = performance.now()
-
-    function step() {
-      const p  = Math.min((performance.now() - start) / duration, 1)
-      const ep = 1 - Math.pow(1 - p, 3)  // ease-out cubic
-
-      for (let i = 0; i < count; i++) {
-        const ri = i * 3
-        posAttr.array[ri]     += (restPositions[ri]     - posAttr.array[ri])     * 0.06
-        posAttr.array[ri + 1] += (restPositions[ri + 1] - posAttr.array[ri + 1]) * 0.06
-        posAttr.array[ri + 2] += (restPositions[ri + 2] - posAttr.array[ri + 2]) * 0.06
-      }
-      posAttr.needsUpdate = true
-
-      // fade in during second half
-      if (p > 0.3) {
-        const fp = (p - 0.3) / 0.7
-        shaderMat!.uniforms.uOpacity.value = DOT_OPACITY * fp * ep
-      }
-
+      const p = Math.min((performance.now() - start) / dur, 1)
+      lineMat.uniforms.uCollapse.value = p
+      // fade line opacity out in second half
+      if (p > 0.5) lineMat.uniforms.uOpacity.value = LINE_OPACITY * (1 - (p - 0.5) / 0.5)
       if (p < 1) requestAnimationFrame(step)
       else {
-        // snap to exact rest
-        for (let i = 0; i < restPositions.length; i++) {
-          posAttr.array[i] = restPositions[i]
-        }
-        posAttr.needsUpdate = true
-        shaderMat!.uniforms.uOpacity.value = DOT_OPACITY
+        lineObj.visible = false
+        // sync midPosAttr to current rest mids before travel
+        for (let i = 0; i < restMids.length; i++) midPosAttr.array[i] = restMids[i]
+        midPosAttr.needsUpdate = true
+        pointsObj.visible = true
+        pointsMat.uniforms.uOpacity.value = 0.6
+        phase = 'points'
+        resolve()
+      }
+    }
+    step()
+  })
+}
+
+// ── expand: points grow back into segments ────────────────────────
+export function expandSegments(): Promise<void> {
+  return new Promise(resolve => {
+    phase = 'expanding'
+    // sync line midpoints to current point positions before expanding
+    // (points have already converged to rest mids via morphToTorus)
+    lineObj.visible  = true
+    lineMat.uniforms.uCollapse.value  = 1
+    lineMat.uniforms.uOpacity.value   = 0
+    pointsObj.visible = false
+
+    const start = performance.now()
+    const dur   = 700
+    function step() {
+      const p = Math.min((performance.now() - start) / dur, 1)
+      lineMat.uniforms.uCollapse.value = 1 - p
+      if (p > 0.3) lineMat.uniforms.uOpacity.value = LINE_OPACITY * ((p - 0.3) / 0.7)
+      if (p < 1) requestAnimationFrame(step)
+      else {
+        lineMat.uniforms.uCollapse.value = 0
+        lineMat.uniforms.uOpacity.value  = LINE_OPACITY
+        phase   = 'lines'
         spinning = true
         resolve()
       }
@@ -274,27 +258,34 @@ function animate() {
   lastTime    = now
   elapsed    += delta
 
-  if (pointsObj && pointsObj.visible && spinning && posAttr) {
-    // rotate points in-place: Z spin + gentle X nod, Y locked
+  // rotate line segments when in lines phase
+  if (spinning && phase === 'lines') {
     const cosZ = Math.cos(0.003)
     const sinZ = Math.sin(0.003)
-    const xOsc = Math.sin(elapsed * 0.4) * 0.0008  // tiny X oscillation per frame
-
-    for (let i = 0; i < restPositions.length / 3; i++) {
+    const xOsc = Math.sin(elapsed * 0.4) * 0.0008
+    const arr  = linePosAttr.array as Float32Array
+    for (let i = 0; i < arr.length / 3; i++) {
       const ri = i * 3
-      const x  = posAttr.array[ri]
-      const y  = posAttr.array[ri + 1]
-      const z  = posAttr.array[ri + 2]
-
-      // Z rotation
-      posAttr.array[ri]     = x * cosZ - y * sinZ
-      posAttr.array[ri + 1] = x * sinZ + y * cosZ
-
-      // tiny X nod
-      posAttr.array[ri + 1] += z * xOsc
-      posAttr.array[ri + 2] -= posAttr.array[ri + 1] * xOsc
+      const x = arr[ri], y = arr[ri+1], z = arr[ri+2]
+      arr[ri]     = x * cosZ - y * sinZ
+      arr[ri + 1] = x * sinZ + y * cosZ
+      arr[ri + 1] += z * xOsc
+      arr[ri + 2] -= arr[ri + 1] * xOsc
     }
-    posAttr.needsUpdate = true
+    // also rotate aMid attribute to stay in sync
+    const mArr = (lineObj.geometry.attributes['aMid'] as THREE.BufferAttribute).array as Float32Array
+    for (let i = 0; i < mArr.length / 3; i++) {
+      const ri = i * 3
+      const x = mArr[ri], y = mArr[ri+1], z = mArr[ri+2]
+      mArr[ri]     = x * cosZ - y * sinZ
+      mArr[ri + 1] = x * sinZ + y * cosZ
+      mArr[ri + 1] += z * xOsc
+      mArr[ri + 2] -= mArr[ri + 1] * xOsc
+    }
+    // sync restMids to current aMid for collapse accuracy
+    for (let i = 0; i < mArr.length; i++) restMids[i] = mArr[i]
+    linePosAttr.needsUpdate = true
+    ;(lineObj.geometry.attributes['aMid'] as THREE.BufferAttribute).needsUpdate = true
   }
 
   renderer.render(scene, camera)
