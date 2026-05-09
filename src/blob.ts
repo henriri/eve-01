@@ -1,6 +1,6 @@
-// ─── blob.ts ─────────────────────────────────────────────────────
-// Three absolutely-positioned radial gradient divs that follow
-// the mouse with different lag coefficients for organic feel.
+// ─── blob.ts v2 ───────────────────────────────────────────────────
+// Desktop: mouse-tracked lerp (3 different lag coefficients)
+// Mobile:  autonomous sine/cosine orbit per blob — no mouse needed
 
 interface BlobState {
   el: HTMLElement
@@ -9,48 +9,68 @@ interface BlobState {
   lag: number
 }
 
+const LAGS    = [0.04, 0.03, 0.06]
+
+// autonomous drift params [xFreq, yFreq, xAmp, yAmp, xPhase, yPhase]
+const DRIFTS: [number, number, number, number, number, number][] = [
+  [0.30, 0.20, 180, 120, 0.0, 0.0],
+  [0.25, 0.35, 200, 150, 1.2, 0.7],
+  [0.40, 0.30, 140, 100, 2.4, 1.8],
+]
+
 export function initBlobs() {
-  const blobs = Array.from(
-    document.querySelectorAll<HTMLElement>('.blob')
-  )
+  const els = Array.from(document.querySelectorAll<HTMLElement>('.blob'))
+  if (!els.length) return
 
-  if (!blobs.length) return
+  const cx = window.innerWidth  / 2
+  const cy = window.innerHeight / 2
 
-  // lag coefficients — lower = slower/heavier
-  const lags = [0.04, 0.03, 0.06]
+  const state: BlobState[] = els.map((el, i) => ({
+    el,
+    x: cx,
+    y: cy,
+    lag: LAGS[i] ?? 0.05,
+  }))
 
-  const state: BlobState[] = blobs.map((el, i) => {
-    const rect = el.getBoundingClientRect()
-    return {
-      el,
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-      lag: lags[i] ?? 0.05,
-    }
-  })
+  const isMobile = window.matchMedia('(hover: none)').matches
 
-  let mouseX = window.innerWidth / 2
-  let mouseY = window.innerHeight / 2
+  let mouseX = cx
+  let mouseY = cy
+  let startTime = performance.now()
 
-  window.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX
-    mouseY = e.clientY
-  })
+  if (!isMobile) {
+    window.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX
+      mouseY = e.clientY
+    })
+  }
 
   function tick() {
-    for (const s of state) {
-      s.x += (mouseX - s.x) * s.lag
-      s.y += (mouseY - s.y) * s.lag
+    const t = (performance.now() - startTime) / 1000
 
-      // offset so blob centre follows cursor, not blob top-left
-      const el = s.el
-      const hw = el.offsetWidth / 2
-      const hh = el.offsetHeight / 2
-      el.style.transform = `translate(${s.x - hw}px, ${s.y - hh}px)`
-      el.style.position = 'fixed'
-      el.style.left = '0'
-      el.style.top = '0'
+    for (let i = 0; i < state.length; i++) {
+      const s = state[i]
+
+      let targetX: number
+      let targetY: number
+
+      if (isMobile) {
+        const [xf, yf, xa, ya, xp, yp] = DRIFTS[i]
+        targetX = cx + Math.sin(t * xf + xp) * xa
+        targetY = cy + Math.cos(t * yf + yp) * ya
+      } else {
+        targetX = mouseX
+        targetY = mouseY
+      }
+
+      s.x += (targetX - s.x) * s.lag
+      s.y += (targetY - s.y) * s.lag
+
+      const hw = s.el.offsetWidth  / 2
+      const hh = s.el.offsetHeight / 2
+      s.el.style.transform = `translate(${s.x - hw}px, ${s.y - hh}px)`
     }
+
     requestAnimationFrame(tick)
   }
 

@@ -1,16 +1,8 @@
-// ─── program.ts ──────────────────────────────────────────────────
-// Static program data + DOM renderer.
-// Replace placeholder titles with real content when ready.
+// ─── program.ts ───────────────────────────────────────────────────
+// Static data — replace placeholders with real content when ready
 
-export interface ProgramEvent {
-  time: string
-  title: string
-}
-
-export interface ProgramDay {
-  label: string
-  events: ProgramEvent[]
-}
+export interface ProgramEvent { time: string; title: string }
+export interface ProgramDay   { label: string; events: ProgramEvent[] }
 
 export const PROGRAM: ProgramDay[] = [
   {
@@ -18,23 +10,23 @@ export const PROGRAM: ProgramDay[] = [
     events: [
       { time: '18:00', title: 'Orbite de stationnement' },
       { time: '21:00', title: '[placeholder]' },
-      { time: '23:30', title: '[placeholder]' },
+      { time: '00:00', title: '[placeholder]' },
     ],
   },
   {
     label: 'Samedi',
     events: [
-      { time: '11:00', title: '[placeholder]' },
-      { time: '16:00', title: 'Apogée' },
-      { time: '22:00', title: '[placeholder]' },
+      { time: '18:00', title: '[placeholder]' },
+      { time: '21:00', title: '[placeholder]' },
+      { time: '00:00', title: 'Apogée' },
     ],
   },
   {
     label: 'Dimanche',
     events: [
-      { time: '10:00', title: '[placeholder]' },
-      { time: '14:00', title: '[placeholder]' },
-      { time: '17:00', title: 'Rentrée atmosphérique' },
+      { time: '18:00', title: '[placeholder]' },
+      { time: '21:00', title: '[placeholder]' },
+      { time: '00:00', title: 'Rentrée atmosphérique' },
     ],
   },
   {
@@ -49,7 +41,6 @@ export const PROGRAM: ProgramDay[] = [
 
 export function renderProgram(container: HTMLElement) {
   container.innerHTML = ''
-
   for (const day of PROGRAM) {
     const dayEl = document.createElement('div')
 
@@ -59,7 +50,7 @@ export function renderProgram(container: HTMLElement) {
     dayEl.appendChild(label)
 
     for (const ev of day.events) {
-      const row = document.createElement('div')
+      const row  = document.createElement('div')
       row.className = 'program-event'
 
       const time = document.createElement('span')
@@ -74,15 +65,13 @@ export function renderProgram(container: HTMLElement) {
       row.appendChild(title)
       dayEl.appendChild(row)
     }
-
     container.appendChild(dayEl)
   }
 }
 
-// staggered reveal — call after back face is visible
 export function revealProgram(container: HTMLElement) {
   const events = container.querySelectorAll<HTMLElement>('.program-event')
   events.forEach((el, i) => {
-    setTimeout(() => el.classList.add('visible'), i * 60)
+    setTimeout(() => el.classList.add('visible'), i * 55)
   })
 }
