@@ -1,14 +1,13 @@
-// ─── frame.ts v2 ──────────────────────────────────────────────────
-// CTA click → explode torus → flip card → expand
-// Close → collapse → flip back
-// Card gets .elevated class on open to sit above canvas
+// ─── frame.ts v3 ──────────────────────────────────────────────────
+// Open:  explodeTorus() → flip → expand → reveal program
+// Close: collapse → flip back → dissolveTerrain() → revealTorus()
 
 import { renderProgram, revealProgram } from './program'
-import { explodeTorus } from './particles'
+import { explodeTorus, dissolveTerrain } from './particles'
 
 export function initFrame() {
-  const card  = document.getElementById('card') as HTMLElement
-  const cta   = document.getElementById('cta') as HTMLButtonElement
+  const card  = document.getElementById('card')  as HTMLElement
+  const cta   = document.getElementById('cta')   as HTMLButtonElement
   const close = document.getElementById('close') as HTMLButtonElement
   const days  = document.getElementById('program-days') as HTMLElement
 
@@ -22,36 +21,39 @@ export function initFrame() {
     if (isOpen) return
     isOpen = true
 
-    // 1. elevate card z-index
     card.classList.add('elevated')
 
-    // 2. explode torus (async — fades torus then spawns particles)
+    // terrain transition starts immediately (async, non-blocking)
     explodeTorus()
 
-    // 3. flip after short pause (particles appearing)
+    // flip after brief pause so terrain is starting to appear
     setTimeout(() => {
       card.classList.add('flipped')
 
-      // 4. expand + reveal program lines after flip completes
       setTimeout(() => {
         card.classList.add('expanded')
         revealProgram(days)
       }, 680)
-    }, 200)
+    }, 250)
   })
 
   close.addEventListener('click', () => {
     if (!isOpen) return
 
+    // collapse card first
     card.classList.remove('expanded')
 
     setTimeout(() => {
       card.classList.remove('flipped')
+      card.classList.remove('elevated')
       isOpen = false
 
-      // reset lines for next open
+      // reset program line visibility for next open
       days.querySelectorAll('.program-event')
-        .forEach(el => el.classList.remove('visible'))
+          .forEach(el => el.classList.remove('visible'))
+
+      // dissolve terrain → camera back → torus reappears
+      dissolveTerrain()
     }, 520)
   })
 }

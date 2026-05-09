@@ -1,22 +1,32 @@
-// ─── blob.ts v2 ───────────────────────────────────────────────────
-// Desktop: mouse-tracked lerp (3 different lag coefficients)
-// Mobile:  autonomous sine/cosine orbit per blob — no mouse needed
+// ─── blob.ts v3 ───────────────────────────────────────────────────
+// Three distinct lag + scale + opacity values → clear depth layering
+// Desktop: mouse lerp  |  Mobile: autonomous sine orbit
 
-interface BlobState {
-  el: HTMLElement
-  x: number
-  y: number
-  lag: number
+interface BlobConfig {
+  lag:     number
+  scale:   number
+  opacity: number
 }
 
-const LAGS    = [0.04, 0.03, 0.06]
+const CONFIGS: BlobConfig[] = [
+  { lag: 0.08,  scale: 1.00, opacity: 0.55 }, // A — front, snappy
+  { lag: 0.035, scale: 0.88, opacity: 0.42 }, // B — mid
+  { lag: 0.016, scale: 0.72, opacity: 0.32 }, // C — back, heavy
+]
 
-// autonomous drift params [xFreq, yFreq, xAmp, yAmp, xPhase, yPhase]
+// autonomous drift [xFreq, yFreq, xAmp, yAmp, xPhase, yPhase]
 const DRIFTS: [number, number, number, number, number, number][] = [
   [0.30, 0.20, 180, 120, 0.0, 0.0],
-  [0.25, 0.35, 200, 150, 1.2, 0.7],
-  [0.40, 0.30, 140, 100, 2.4, 1.8],
+  [0.22, 0.32, 160, 130, 1.2, 0.7],
+  [0.38, 0.28, 120,  90, 2.4, 1.8],
 ]
+
+interface BlobState {
+  el:  HTMLElement
+  x:   number
+  y:   number
+  cfg: BlobConfig
+}
 
 export function initBlobs() {
   const els = Array.from(document.querySelectorAll<HTMLElement>('.blob'))
@@ -25,18 +35,19 @@ export function initBlobs() {
   const cx = window.innerWidth  / 2
   const cy = window.innerHeight / 2
 
-  const state: BlobState[] = els.map((el, i) => ({
-    el,
-    x: cx,
-    y: cy,
-    lag: LAGS[i] ?? 0.05,
-  }))
+  // apply initial scale + opacity from config
+  const state: BlobState[] = els.map((el, i) => {
+    const cfg = CONFIGS[i] ?? CONFIGS[0]
+    el.style.opacity = String(cfg.opacity)
+    el.style.transform = `scale(${cfg.scale})`
+    return { el, x: cx, y: cy, cfg }
+  })
 
   const isMobile = window.matchMedia('(hover: none)').matches
+  const startTime = performance.now()
 
   let mouseX = cx
   let mouseY = cy
-  let startTime = performance.now()
 
   if (!isMobile) {
     window.addEventListener('mousemove', (e) => {
@@ -63,12 +74,14 @@ export function initBlobs() {
         targetY = mouseY
       }
 
-      s.x += (targetX - s.x) * s.lag
-      s.y += (targetY - s.y) * s.lag
+      s.x += (targetX - s.x) * s.cfg.lag
+      s.y += (targetY - s.y) * s.cfg.lag
 
       const hw = s.el.offsetWidth  / 2
       const hh = s.el.offsetHeight / 2
-      s.el.style.transform = `translate(${s.x - hw}px, ${s.y - hh}px)`
+
+      // combine position translate with depth scale
+      s.el.style.transform = `translate(${s.x - hw}px, ${s.y - hh}px) scale(${s.cfg.scale})`
     }
 
     requestAnimationFrame(tick)
