@@ -17,10 +17,12 @@ const DOT_OPACITY  = 0.88
 const VERT_SHADER = `
   uniform float uBaseSize;
   uniform float uPixelRatio;
+  uniform float uScreenWidth;
   uniform float uOpacity;
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = uBaseSize * uPixelRatio * (1.0 / -mvPosition.z);
+    float scale = uScreenWidth / 1440.0;
+    gl_PointSize = uBaseSize * scale * uPixelRatio * (1.0 / -mvPosition.z);
     gl_Position  = projectionMatrix * mvPosition;
   }
 `
@@ -99,9 +101,10 @@ export function initTorus() {
 
   shaderMat = new THREE.ShaderMaterial({
     uniforms: {
-      uBaseSize:   { value: 8 },
-      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
-      uOpacity:    { value: DOT_OPACITY },
+      uBaseSize:    { value: 8 },
+      uPixelRatio:  { value: Math.min(window.devicePixelRatio, 2) },
+      uScreenWidth: { value: window.innerWidth },
+      uOpacity:     { value: DOT_OPACITY },
     },
     vertexShader:   VERT_SHADER,
     fragmentShader: FRAG_SHADER,
@@ -150,6 +153,7 @@ function resize() {
   camera.aspect = window.innerWidth / window.innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
+  if (shaderMat) shaderMat.uniforms.uScreenWidth.value = window.innerWidth
 }
 
 function animate() {

@@ -23,11 +23,13 @@ const CAM_TARGET  = new THREE.Vector3(0,   0, 0)
 const VERT_EXTRA = `
   uniform float uBaseSize;
   uniform float uPixelRatio;
+  uniform float uScreenWidth;
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    float t    = clamp((position.y + 0.8) / 1.6, 0.0, 1.0);
-    float size = mix(1.5, 5.0, t);
-    gl_PointSize = size * uBaseSize * uPixelRatio * (1.0 / -mvPosition.z);
+    float t     = clamp((position.y + 0.8) / 1.6, 0.0, 1.0);
+    float size  = mix(1.5, 5.0, t);
+    float scale = uScreenWidth / 1440.0;
+    gl_PointSize = size * uBaseSize * scale * uPixelRatio * (1.0 / -mvPosition.z);
     gl_Position  = projectionMatrix * mvPosition;
   }
 `
@@ -159,7 +161,12 @@ function buildTerrainData() {
   extraAttr.setUsage(THREE.DynamicDrawUsage)
   geo.setAttribute('position', extraAttr)
   extraMat = new THREE.ShaderMaterial({
-    uniforms: { uOpacity: { value: 0 }, uBaseSize: { value: 8 }, uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) } },
+    uniforms: {
+      uOpacity:     { value: 0 },
+      uBaseSize:    { value: 8 },
+      uPixelRatio:  { value: Math.min(window.devicePixelRatio, 2) },
+      uScreenWidth: { value: window.innerWidth },
+    },
     vertexShader: VERT_EXTRA, fragmentShader: FRAG_EXTRA, transparent: true,
   })
   extraPoints = new THREE.Points(geo, extraMat)
