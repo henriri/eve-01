@@ -3,7 +3,7 @@
 // Each particle drifts perpetually with sine wobble + drag
 
 import * as THREE from 'three'
-import { torusGeo, torusMesh, fadeTorus, getScene, getRenderer, getCamera } from './torus'
+import { torusGeo, torusMesh, fadeTorus, getScene } from './torus'
 
 // Blob palette — confetti inherit these colors
 const COLORS = [

@@ -9,11 +9,7 @@ export let torusGeo:  THREE.TorusGeometry | null = null
 let renderer: THREE.WebGLRenderer
 let scene: THREE.Scene
 let camera: THREE.PerspectiveCamera
-let animId: number
-
-export function getScene()    { return scene }
-export function getRenderer() { return renderer }
-export function getCamera()   { return camera }
+export function getScene() { return scene }
 
 export function initTorus() {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -73,7 +69,7 @@ function resize() {
 }
 
 function animate() {
-  animId = requestAnimationFrame(animate)
+  requestAnimationFrame(animate)
   if (torusMesh && torusMesh.visible) {
     torusMesh.rotation.y += 0.003
     torusMesh.rotation.z += 0.001
