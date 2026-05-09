@@ -331,5 +331,6 @@ body {
   .face-back { padding: 20px 16px; }
   .card.expanded {
     width: calc(100vw - 24px);
+    height: calc(100vh - 100px);
   }
 }
