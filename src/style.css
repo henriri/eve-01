@@ -126,7 +126,6 @@ body {
 
 .card.expanded {
   width: min(calc(100vw - 48px), 900px);
-  height: min(calc(100vh - 48px), 900px);
   transition:
     transform 0.65s cubic-bezier(0.77, 0, 0.18, 1),
     width  0.5s cubic-bezier(0.77, 0, 0.18, 1) 0.3s,
