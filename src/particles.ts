@@ -150,7 +150,7 @@ function buildTerrain() {
   shaderMat = new THREE.ShaderMaterial({
     uniforms: {
       uOpacity:    { value: 0 },
-      uBaseSize:   { value: 30 },
+      uBaseSize:   { value: 10 },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
     },
     vertexShader:   VERT_SHADER,

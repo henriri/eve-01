@@ -105,7 +105,7 @@ function buildTorusPoints() {
 
   shaderMat = new THREE.ShaderMaterial({
     uniforms: {
-      uBaseSize:   { value: 30 },
+      uBaseSize:   { value: 10 },
       uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
       uOpacity:    { value: DOT_OPACITY },
     },
