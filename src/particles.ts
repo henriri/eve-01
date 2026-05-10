@@ -28,7 +28,7 @@ const VERT_EXTRA = `
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     float t     = clamp((position.y + 0.8) / 1.6, 0.0, 1.0);
     float size  = mix(1.5, 5.0, t);
-    float scale = uScreenWidth / 1440.0;
+    float scale = clamp(uScreenWidth / 1440.0, 0.4, 1.0);
     gl_PointSize = size * uBaseSize * scale * uPixelRatio * (1.0 / -mvPosition.z);
     gl_Position  = projectionMatrix * mvPosition;
   }

@@ -21,7 +21,7 @@ const VERT_SHADER = `
   uniform float uOpacity;
   void main() {
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    float scale = uScreenWidth / 1440.0;
+    float scale = clamp(uScreenWidth / 1440.0, 0.4, 1.0);
     gl_PointSize = uBaseSize * scale * uPixelRatio * (1.0 / -mvPosition.z);
     gl_Position  = projectionMatrix * mvPosition;
   }
